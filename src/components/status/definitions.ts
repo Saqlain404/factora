@@ -1,4 +1,4 @@
-import { CheckCircle2, CircleDashed, Clock3, Loader2, Truck, XCircle } from "lucide-react";
+import { CheckCircle2, CircleDashed, Clock3, Loader2, Truck, XCircle, Package } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { StatusTone } from "./status-badge";
 
@@ -17,6 +17,29 @@ export const PO_STATUS: Record<string, StatusMeta> = {
   confirmed: { label: "Confirmed", tone: "info", icon: Clock3 },
   received: { label: "Partially received", tone: "warning", icon: Truck },
   closed: { label: "Closed", tone: "success", icon: CheckCircle2 },
+};
+
+/* ------------------------------------------------------------------ */
+/* Sales orders                                                        */
+/* ------------------------------------------------------------------ */
+
+export const SO_STATUS: Record<string, StatusMeta> = {
+  draft: { label: "Draft", tone: "neutral", icon: CircleDashed },
+  confirmed: { label: "Confirmed", tone: "info", icon: Package },
+  partial: { label: "Partially dispatched", tone: "warning", icon: Truck },
+  completed: { label: "Completed", tone: "success", icon: CheckCircle2 },
+  cancelled: { label: "Cancelled", tone: "danger", icon: XCircle },
+};
+
+/* ------------------------------------------------------------------ */
+/* Dispatches                                                          */
+/* ------------------------------------------------------------------ */
+
+export const DISPATCH_STATUS: Record<string, StatusMeta> = {
+  pending: { label: "Pending", tone: "neutral", icon: CircleDashed },
+  in_transit: { label: "In transit", tone: "info", icon: Truck },
+  delivered: { label: "Delivered", tone: "success", icon: CheckCircle2 },
+  cancelled: { label: "Cancelled", tone: "danger", icon: XCircle },
 };
 
 /* ------------------------------------------------------------------ */

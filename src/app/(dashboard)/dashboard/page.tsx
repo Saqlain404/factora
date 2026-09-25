@@ -11,6 +11,8 @@ import {
   listConfirmedOrdersWithItems,
   listPurchaseReceipts,
 } from "@/modules/procurement/queries";
+import { getSalesOrders, getSalesOrderCounts } from "@/modules/sales/queries";
+import { getDispatches, getDispatchCounts } from "@/modules/sales/dispatch-queries";
 import { DashboardView } from "./dashboard-view";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +31,11 @@ export default async function DashboardPage() {
     orders,
     outstanding,
     receipts,
-  ] = await Promise.all([
+    salesOrders,
+    salesCounts,
+    dispatches,
+    dispatchCounts,
+  ] = await Promise.all([ 
     listCustomers(),
     listSuppliers(),
     listProducts(),
@@ -40,11 +46,20 @@ export default async function DashboardPage() {
     listPurchaseOrders(),
     listConfirmedOrdersWithItems(),
     listPurchaseReceipts(),
+    getSalesOrders(),
+    getSalesOrderCounts(),
+    getDispatches(),
+    getDispatchCounts(),
   ]);
 
   const draftOrders = orders.filter((order) => order.status === "draft");
   const activeOrders = orders.filter(
     (order) => order.status === "confirmed" || order.status === "received"
+  );
+
+  const draftSalesOrders = salesOrders.filter((order) => order.status === "draft");
+  const activeSalesOrders = salesOrders.filter(
+    (order) => order.status === "confirmed" || order.status === "partial"
   );
 
   return (
@@ -57,11 +72,16 @@ export default async function DashboardPage() {
         machines: machines.length,
         moulds: moulds.length,
       }}
+      salesCounts={salesCounts}
+      dispatchCounts={dispatchCounts}
       stock={stock}
       draftOrders={draftOrders}
       activeOrders={activeOrders}
       outstandingOrders={outstanding}
       recentReceipts={receipts.slice(0, 8)}
+      draftSalesOrders={draftSalesOrders}
+      activeSalesOrders={activeSalesOrders}
+      recentDispatches={dispatches.slice(0, 8)}
     />
   );
 }

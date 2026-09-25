@@ -8,3 +8,5 @@ export * from "./machines/schema";
 export * from "./bom/schema";
 export * from "./procurement/schema";
 export * from "./inventory/schema";
+export * from "./production/schema";
+export * from "./sales/schema";

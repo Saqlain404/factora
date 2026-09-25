@@ -12,6 +12,8 @@ import {
   Truck,
   Users,
   Wrench,
+  Send,
+  ClipboardList,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -26,16 +28,21 @@ import {
 import { MetricCard } from "@/components/metrics/metric-card";
 import { StatusBadge } from "@/components/status/status-badge";
 import { EmptyState } from "@/components/empty-state";
+import { DISPATCH_STATUS } from "@/components/status/definitions";
 import { formatDate } from "@/lib/utils";
 import type { StockBalanceRow } from "@/modules/inventory/queries";
 import type { PurchaseOrderWithSupplier } from "@/modules/procurement/queries";
 import type { ConfirmedOrderWithItems } from "@/modules/procurement/queries";
 import type { PurchaseReceiptRow } from "@/modules/procurement/queries";
+import type { SalesOrderWithCustomer } from "@/modules/sales/queries";
+import type { DispatchListItem } from "@/modules/sales/dispatch-queries";
 
 type AttentionItem =
   | { kind: "low-stock"; material: StockBalanceRow }
   | { kind: "draft"; order: PurchaseOrderWithSupplier }
-  | { kind: "outstanding"; order: ConfirmedOrderWithItems };
+  | { kind: "outstanding"; order: ConfirmedOrderWithItems }
+  | { kind: "draft-so"; order: SalesOrderWithCustomer }
+  | { kind: "pending-dispatch"; order: DispatchListItem };
 
 type DashboardData = {
   counts: {
@@ -46,11 +53,16 @@ type DashboardData = {
     machines: number;
     moulds: number;
   };
+  salesCounts: { draft: number; active: number; completed: number };
+  dispatchCounts: { pending: number; inTransit: number; delivered: number };
   stock: StockBalanceRow[];
   draftOrders: PurchaseOrderWithSupplier[];
   activeOrders: PurchaseOrderWithSupplier[];
   outstandingOrders: ConfirmedOrderWithItems[];
   recentReceipts: PurchaseReceiptRow[];
+  draftSalesOrders: SalesOrderWithCustomer[];
+  activeSalesOrders: SalesOrderWithCustomer[];
+  recentDispatches: DispatchListItem[];
 };
 
 export function DashboardView(data: DashboardData) {
@@ -64,6 +76,11 @@ export function DashboardView(data: DashboardData) {
     0
   );
 
+  const pendingDispatchLines = data.recentDispatches.reduce(
+    (total, d) => total + d.itemCount,
+    0
+  );
+
   const attentionItems: AttentionItem[] = [
     ...lowStock.map(
       (row): AttentionItem => ({ kind: "low-stock", material: row })
@@ -74,6 +91,14 @@ export function DashboardView(data: DashboardData) {
     ...data.outstandingOrders.map(
       (order): AttentionItem => ({ kind: "outstanding", order })
     ),
+    ...data.draftSalesOrders.map(
+      (order): AttentionItem => ({ kind: "draft-so", order })
+    ),
+    ...data.recentDispatches
+      .filter((d) => d.status === "pending")
+      .map(
+        (d): AttentionItem => ({ kind: "pending-dispatch", order: d })
+      ),
   ].slice(0, 8);
 
   const hour = new Date().getHours();
@@ -104,7 +129,7 @@ export function DashboardView(data: DashboardData) {
         </Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-8">
         <MetricCard
           label="Low stock"
           value={lowStock.length}
@@ -122,18 +147,48 @@ export function DashboardView(data: DashboardData) {
           href="/procurement/purchase-orders"
         />
         <MetricCard
-          label="Draft purchase orders"
+          label="Draft POs"
           value={data.draftOrders.length}
           sub={data.draftOrders.length > 0 ? "Waiting for confirmation" : "No pending confirmations"}
           icon={FileText}
           href="/procurement/purchase-orders"
         />
         <MetricCard
-          label="Active purchase orders"
+          label="Active POs"
           value={data.activeOrders.length}
           sub="Confirmed or partially received"
           icon={Boxes}
           href="/procurement/purchase-orders"
+        />
+        <MetricCard
+          label="Draft SOs"
+          value={data.draftSalesOrders.length}
+          sub={data.draftSalesOrders.length > 0 ? "Waiting for confirmation" : "No pending confirmations"}
+          icon={ClipboardList}
+          href="/sales/orders"
+        />
+        <MetricCard
+          label="Active SOs"
+          value={data.activeSalesOrders.length}
+          sub="Confirmed or partially dispatched"
+          icon={Package}
+          href="/sales/orders"
+        />
+        <MetricCard
+          label="Pending dispatches"
+          value={data.dispatchCounts.pending}
+          sub={`${pendingDispatchLines} line${pendingDispatchLines === 1 ? "" : "s"} to ship`}
+          icon={Send}
+          tone={data.dispatchCounts.pending > 0 ? "warning" : "success"}
+          href="/sales/dispatches"
+        />
+        <MetricCard
+          label="In transit"
+          value={data.dispatchCounts.inTransit}
+          sub="Shipped, awaiting delivery"
+          icon={Truck}
+          tone={data.dispatchCounts.inTransit > 0 ? "info" : "success"}
+          href="/sales/dispatches"
         />
       </div>
 
@@ -143,7 +198,7 @@ export function DashboardView(data: DashboardData) {
             <div>
               <CardTitle>Needs attention</CardTitle>
               <CardDescription>
-                What to action first — low stock, unconfirmed orders and outstanding receipts.
+                What to action first — low stock, unconfirmed orders, outstanding receipts and pending dispatches.
               </CardDescription>
             </div>
             {attentionItems.length > 0 ? (
@@ -156,7 +211,7 @@ export function DashboardView(data: DashboardData) {
                 compact
                 icon={AlertTriangle}
                 title="Nothing needs your attention"
-                description="No low-stock materials, draft purchase orders or outstanding receipts right now."
+                description="No low-stock materials, draft orders, outstanding receipts or pending dispatches right now."
               />
             ) : (
               <ul className="divide-y">
@@ -195,7 +250,7 @@ export function DashboardView(data: DashboardData) {
                     return (
                       <li key={`draft-${order.id}`} className="flex items-center justify-between gap-3 px-4 py-3">
                         <div className="flex min-w-0 items-center gap-3">
-                          <StatusBadge tone="neutral" label="Draft" showDot />
+                          <StatusBadge tone="neutral" label="Draft PO" showDot />
                           <div className="min-w-0">
                             <Link href={`/procurement/purchase-orders/${order.id}`} className="truncate text-sm font-medium underline-offset-4 hover:underline">
                               {order.poNo}
@@ -236,6 +291,56 @@ export function DashboardView(data: DashboardData) {
                           className="shrink-0"
                         >
                           Receive
+                        </Button>
+                      </li>
+                    );
+                  }
+                  if (item.kind === "draft-so" && item.order) {
+                    const order = item.order;
+                    return (
+                      <li key={`draft-so-${order.id}`} className="flex items-center justify-between gap-3 px-4 py-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <StatusBadge tone="neutral" label="Draft SO" showDot />
+                          <div className="min-w-0">
+                            <Link href={`/sales/orders/${order.id}`} className="truncate text-sm font-medium underline-offset-4 hover:underline">
+                              {order.soNo}
+                            </Link>
+                            <p className="truncate text-xs text-muted-foreground">{order.customerName}</p>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          render={<Link href={`/sales/orders/${order.id}`} />}
+                          className="shrink-0"
+                        >
+                          Confirm
+                        </Button>
+                      </li>
+                    );
+                  }
+                  if (item.kind === "pending-dispatch" && item.order) {
+                    const dispatch = item.order;
+                    return (
+                      <li key={`pending-disp-${dispatch.id}`} className="flex items-center justify-between gap-3 px-4 py-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <StatusBadge tone="warning" label="Pending dispatch" showDot />
+                          <div className="min-w-0">
+                            <Link href={`/sales/dispatches/${dispatch.id}`} className="truncate text-sm font-medium underline-offset-4 hover:underline">
+                              {dispatch.dispatchNo}
+                            </Link>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {dispatch.customerName} · {dispatch.itemCount} line(s)
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          render={<Link href={`/sales/dispatches/${dispatch.id}`} />}
+                          className="shrink-0"
+                        >
+                          Ship
                         </Button>
                       </li>
                     );
@@ -344,6 +449,51 @@ export function DashboardView(data: DashboardData) {
         </Card>
 
         <Card>
+          <CardHeader className="flex-row items-center justify-between space-y-0">
+            <div>
+              <CardTitle>Recent dispatches</CardTitle>
+              <CardDescription>Outbound shipments to customers.</CardDescription>
+            </div>
+            <Button variant="ghost" size="sm" render={<Link href="/sales/dispatches" />}>
+              View all
+              <ArrowRight aria-hidden className="size-3.5" />
+            </Button>
+          </CardHeader>
+          <CardContent className="p-0">
+            {data.recentDispatches.length === 0 ? (
+              <EmptyState
+                compact
+                icon={Send}
+                title="No dispatches recorded yet"
+                description="Once you record a dispatch, it will show up here."
+              />
+            ) : (
+              <ul className="divide-y">
+                {data.recentDispatches.map((dispatch) => (
+                  <li key={dispatch.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <Link
+                        href={`/sales/dispatches/${dispatch.id}`}
+                        className="num shrink-0 font-medium text-foreground underline-offset-4 hover:underline"
+                      >
+                        {dispatch.dispatchNo}
+                      </Link>
+                      <span className="truncate text-muted-foreground">
+                        {dispatch.customerName}
+                      </span>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-3 text-xs text-muted-foreground">
+                      <StatusBadge status={dispatch.status} map={DISPATCH_STATUS} showDot />
+                      <span className="hidden sm:inline">{formatDate(dispatch.dispatchDate)}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
           <CardHeader>
             <CardTitle>Master data</CardTitle>
             <CardDescription>Registered records across the business.</CardDescription>
@@ -355,6 +505,8 @@ export function DashboardView(data: DashboardData) {
             <MasterLink href="/raw-materials" icon={<Boxes className="size-4" />} label="Materials" value={data.counts.materials} />
             <MasterLink href="/machines" icon={<Factory className="size-4" />} label="Machines" value={data.counts.machines} />
             <MasterLink href="/moulds" icon={<Wrench className="size-4" />} label="Moulds" value={data.counts.moulds} />
+            <MasterLink href="/sales/orders" icon={<ClipboardList className="size-4" />} label="Sales Orders" value={data.salesCounts.draft + data.salesCounts.active + data.salesCounts.completed} />
+            <MasterLink href="/sales/dispatches" icon={<Send className="size-4" />} label="Dispatches" value={data.dispatchCounts.pending + data.dispatchCounts.inTransit + data.dispatchCounts.delivered} />
           </CardContent>
         </Card>
       </div>
